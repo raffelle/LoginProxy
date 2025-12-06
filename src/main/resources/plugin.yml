@@ -1,0 +1,9 @@
+{
+  "id": "loginproxy",
+  "name": "LoginProxy",
+  "version": "1.0",
+  "description": "Plugin proxy pour login obligatoire",
+  "authors": ["TonNom"],
+  "main": "monplugin.velocity.Main",
+  "depends": []
+}

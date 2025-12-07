@@ -18,13 +18,14 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-@Plugin(id = "loginproxy", name = "LoginProxy", version = "1.0")
+@Plugin(id = "loginproxy", name = "LoginProxy", version = "1.0.3")
 public class Main {
 
     private final Logger logger;
     private final ProxyServer server;
 
-    private final Map<String, Boolean> loggedIP = new HashMap<>();
+    // ✅ Stockage par username+IP pour que la session soit invalide si l'IP change
+    private final Map<String, Boolean> loggedSessions = new HashMap<>();
 
     public static final MinecraftChannelIdentifier LOGIN_CHANNEL =
             MinecraftChannelIdentifier.from("login:success");
@@ -33,33 +34,32 @@ public class Main {
     public Main(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
         this.server = server;
         this.logger = logger;
-
         server.getChannelRegistrar().register(LOGIN_CHANNEL);
     }
 
+    private String getKey(Player player) {
+        return player.getUsername() + "@" + player.getRemoteAddress().getAddress().getHostAddress();
+    }
+
     public boolean isBypassLogin(Player player) {
-        String key = player.getUsername() + player.getRemoteAddress().getAddress().getHostAddress();
-        return loggedIP.getOrDefault(key, false);
+        return loggedSessions.getOrDefault(getKey(player), false);
     }
 
     public void setLoggedIn(Player player) {
-        String key = player.getUsername() + player.getRemoteAddress().getAddress().getHostAddress();
-        loggedIP.put(key, true);
-        logger.info("✅ Joueur authentifié sur le proxy : " + player.getUsername());
+        loggedSessions.put(getKey(player), true);
+        logger.info("Joueur authentifié sur le proxy : " + player.getUsername() + " | IP: " + player.getRemoteAddress().getAddress().getHostAddress());
     }
 
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
+        // ✅ On garde la session, donc on ne supprime rien ici
         Player player = event.getPlayer();
-        String key = player.getUsername() + player.getRemoteAddress().getAddress().getHostAddress();
-        loggedIP.remove(key);
+        logger.info("Joueur déconnecté du proxy : " + player.getUsername());
     }
 
-    // ✅ BLOQUE UNIQUEMENT TANT QUE PAS AUTH
     @Subscribe
     public void onCommand(CommandExecuteEvent event) {
         if (!(event.getCommandSource() instanceof Player player)) return;
-
         if (isBypassLogin(player)) return;
 
         String msg = event.getCommand().toLowerCase();
@@ -69,19 +69,13 @@ public class Main {
         }
     }
 
-    // ✅ ✅ ✅ RÉCEPTION CORRECTE DU MESSAGE DEPUIS LE LOBBY
     @Subscribe
     public void onPluginMessage(PluginMessageEvent event) {
         if (!event.getIdentifier().equals(LOGIN_CHANNEL)) return;
-
-        // ✅ SOURCE = LE SERVEUR (Lobby), PAS LE JOUEUR
         if (!(event.getSource() instanceof ServerConnection serverConnection)) return;
 
         Player player = serverConnection.getPlayer();
-
         setLoggedIn(player);
-
         player.sendMessage(Component.text("✅ Authentification proxy validée !"));
     }
 }
-
